@@ -13,24 +13,26 @@ import (
 	"strconv"
 	"text/template"
 
-	"github.com/facebookincubator/ent/entc/gen/internal"
+	"github.com/facebook/ent/entc/gen/internal"
 )
 
-//go:generate go run github.com/go-bindata/go-bindata/go-bindata -o=internal/bindata.go -pkg=internal ./template/...
+//go:generate go run github.com/go-bindata/go-bindata/go-bindata -o=internal/bindata.go -pkg=internal -modtime=1 ./template/...
 
 type (
 	// TypeTemplate specifies a template that is executed with
 	// each Type object of the graph.
 	TypeTemplate struct {
-		Name   string             // template name.
-		Format func(*Type) string // file name format.
+		Name           string             // template name.
+		Format         func(*Type) string // file name format.
+		ExtendPatterns []string           // extend patterns.
 	}
 	// GraphTemplate specifies a template that is executed with
 	// the Graph object.
 	GraphTemplate struct {
-		Name   string            // template name.
-		Format string            // file name format.
-		Skip   func(*Graph) bool // skip condition.
+		Name           string            // template name.
+		Skip           func(*Graph) bool // skip condition (storage constraints or gated by a feature-flag).
+		Format         string            // file name format.
+		ExtendPatterns []string          // extend patterns.
 	}
 )
 
@@ -60,11 +62,17 @@ var (
 		{
 			Name:   "where",
 			Format: pkgf("%s/where.go"),
+			ExtendPatterns: []string{
+				"where/additional/*",
+			},
 		},
 		{
 			Name: "meta",
 			Format: func(t *Type) string {
 				return fmt.Sprintf("%s/%s.go", t.Package(), t.Package())
+			},
+			ExtendPatterns: []string{
+				"meta/additional/*",
 			},
 		},
 	}
@@ -77,6 +85,9 @@ var (
 		{
 			Name:   "client",
 			Format: "client.go",
+			ExtendPatterns: []string{
+				"client/fields/additional/*",
+			},
 		},
 		{
 			Name:   "context",
@@ -91,22 +102,52 @@ var (
 			Format: "config.go",
 		},
 		{
+			Name:   "mutation",
+			Format: "mutation.go",
+		},
+		{
 			Name:   "migrate",
 			Format: "migrate/migrate.go",
-			Skip:   func(g *Graph) bool { return !g.migrateSupport() },
+			Skip:   func(g *Graph) bool { return !g.SupportMigrate() },
 		},
 		{
 			Name:   "schema",
 			Format: "migrate/schema.go",
-			Skip:   func(g *Graph) bool { return !g.migrateSupport() },
+			Skip:   func(g *Graph) bool { return !g.SupportMigrate() },
 		},
 		{
 			Name:   "predicate",
 			Format: "predicate/predicate.go",
 		},
 		{
-			Name:   "example",
-			Format: "example_test.go",
+			Name:   "hook",
+			Format: "hook/hook.go",
+		},
+		{
+			Name:   "privacy",
+			Format: "privacy/privacy.go",
+			Skip: func(g *Graph) bool {
+				return !g.featureEnabled(FeaturePrivacy)
+			},
+		},
+		{
+			Name:   "entql",
+			Format: "entql.go",
+			Skip: func(g *Graph) bool {
+				return !g.featureEnabled(FeatureEntQL)
+			},
+		},
+		{
+			Name:   "runtime/ent",
+			Format: "runtime.go",
+		},
+		{
+			Name:   "enttest",
+			Format: "enttest/enttest.go",
+		},
+		{
+			Name:   "runtime/pkg",
+			Format: "runtime/runtime.go",
 		},
 	}
 	// templates holds the Go templates for the code generation.
@@ -140,4 +181,15 @@ func init() {
 
 func pkgf(s string) func(t *Type) string {
 	return func(t *Type) string { return fmt.Sprintf(s, t.Package()) }
+}
+
+// match reports if the given name matches the extended pattern.
+func match(patterns []string, name string) bool {
+	for _, pat := range patterns {
+		matched, _ := filepath.Match(pat, name)
+		if matched {
+			return true
+		}
+	}
+	return false
 }

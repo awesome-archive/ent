@@ -5,9 +5,10 @@
 package schema
 
 import (
-	"github.com/facebookincubator/ent"
-	"github.com/facebookincubator/ent/schema/edge"
-	"github.com/facebookincubator/ent/schema/field"
+	"github.com/facebook/ent"
+	"github.com/facebook/ent/schema/edge"
+	"github.com/facebook/ent/schema/field"
+	"github.com/facebook/ent/schema/index"
 )
 
 // Pet holds the schema definition for the Pet entity.
@@ -26,9 +27,17 @@ func (Pet) Fields() []ent.Field {
 func (Pet) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.From("team", User.Type).
-			Unique().Ref("team"),
+			Ref("team").
+			Unique(),
 		edge.From("owner", User.Type).
-			Unique().
-			Ref("pets"),
+			Ref("pets").
+			Unique(),
+	}
+}
+
+func (Pet) Indexes() []ent.Index {
+	return []ent.Index{
+		index.Fields("name").
+			Edges("owner"),
 	}
 }
